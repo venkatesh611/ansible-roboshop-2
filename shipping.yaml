@@ -1,0 +1,310 @@
+# =========================================================
+# PLAYBOOK: SHIPPING MICROSERVICE SETUP
+# =========================================================
+# This playbook configures Shipping microservice
+# in RoboShop application.
+#
+# Shipping Service Responsibilities:
+#   - Handles shipment processing
+#   - Calculates delivery information
+#   - Connects with Cart service
+#   - Uses MySQL database
+#
+# Technology Stack:
+#   - Java
+#   - Maven
+#   - Spring Boot
+#   - MySQL
+#
+# This playbook performs:
+#   1. Maven installation
+#   2. MySQL client installation
+#   3. Downloading application code
+#   4. Building Java application
+#   5. Configuring systemd service
+#   6. Importing database schema/data
+#   7. Starting shipping service
+# =========================================================
+
+- name: configure shipping component
+
+  # Target inventory group/server
+  hosts: shipping
+
+
+  # Execute tasks with sudo/root privileges
+  become: yes
+
+
+  tasks:
+
+  # -------------------------------------------------------
+  # Install Maven and MySQL client
+  # -------------------------------------------------------
+  # dnf module installs packages in RHEL systems.
+  #
+  # loop installs multiple packages.
+  #
+  # maven
+  #   -> Java build tool
+  #
+  # mysql
+  #   -> MySQL client utilities
+  # -------------------------------------------------------
+  - name: install maven and mysql
+    ansible.builtin.dnf:
+      name: "{{ item }}"
+      state: installed
+    loop:
+    - maven
+    - mysql
+
+
+  # -------------------------------------------------------
+  # Install Python MySQL libraries
+  # -------------------------------------------------------
+  # community.mysql modules internally require:
+  #   PyMySQL
+  #   cryptography
+  #
+  # cryptography
+  #   -> SSL/encryption support
+  #
+  # PyMySQL
+  #   -> Python MySQL connector library
+  #
+  # executable: pip3.9
+  # explicitly uses Python 3.9 pip
+  # -------------------------------------------------------
+  - name: install PyMySQL and cryptography
+    ansible.builtin.pip:
+      name: "{{ item }}"
+      executable: pip3.9
+    loop:
+    - cryptography
+    - PyMySQL
+
+
+  # -------------------------------------------------------
+  # Create application directory
+  # -------------------------------------------------------
+  # state: directory
+  # creates directory if not present.
+  #
+  # Application code extracted into /app.
+  # -------------------------------------------------------
+  - name: create app directory
+    ansible.builtin.file:
+      path: /app
+      state: directory
+
+
+  # -------------------------------------------------------
+  # Create roboshop system user
+  # -------------------------------------------------------
+  # Applications should not run as root.
+  #
+  # shell: /sbin/nologin
+  # disables login access.
+  #
+  # system: true
+  # creates system account.
+  #
+  # home: /app
+  # application home directory.
+  # -------------------------------------------------------
+  - name: create roboshop system user
+    ansible.builtin.user:
+      name: roboshop
+      shell: /sbin/nologin
+      system: true
+      home: /app
+
+
+  # -------------------------------------------------------
+  # Download shipping application code
+  # -------------------------------------------------------
+  # get_url downloads files from internet.
+  #
+  # url  -> source artifact
+  # dest -> destination in target server
+  #
+  # Downloads shipping-v3.zip from AWS S3.
+  # -------------------------------------------------------
+  - name: download shipping code
+    ansible.builtin.get_url:
+      url: https://roboshop-artifacts.s3.amazonaws.com/shipping-v3.zip
+      dest: /tmp/shipping.zip
+
+
+  # -------------------------------------------------------
+  # Extract application code
+  # -------------------------------------------------------
+  # unarchive extracts zip/tar files.
+  #
+  # remote_src: yes
+  # means file already exists in target server.
+  #
+  # Code extracted into /app.
+  # -------------------------------------------------------
+  - name: extract shipping code
+    ansible.builtin.unarchive:
+      src: /tmp/shipping.zip
+      dest: /app
+      remote_src: yes
+
+
+  # -------------------------------------------------------
+  # Build Java application using Maven
+  # -------------------------------------------------------
+  # command module executes Linux commands.
+  #
+  # mvn clean package
+  #
+  # clean:
+  # removes previous build files.
+  #
+  # package:
+  # compiles code and creates JAR artifact.
+  #
+  # args:
+  # chdir: /app
+  #
+  # Equivalent command:
+  # cd /app && mvn clean package
+  # -------------------------------------------------------
+  - name: install maven dependencies
+    ansible.builtin.command: mvn clean package
+    args:
+      chdir: /app
+
+
+  # -------------------------------------------------------
+  # Rename generated jar file
+  # -------------------------------------------------------
+  # Maven creates versioned jar:
+  # shipping-1.0.jar
+  #
+  # Renamed to:
+  # shipping.jar
+  #
+  # Easier for service management/configuration.
+  #
+  # Equivalent command:
+  # mv target/shipping-1.0.jar shipping.jar
+  # -------------------------------------------------------
+  - name: rename jar file
+    ansible.builtin.command: mv target/shipping-1.0.jar shipping.jar
+    args:
+      chdir: /app
+
+
+  # -------------------------------------------------------
+  # Copy systemd service file
+  # -------------------------------------------------------
+  # copy module transfers:
+  # control node -> target node
+  #
+  # shipping.service defines:
+  #   startup command
+  #   environment variables
+  #   runtime behavior
+  # -------------------------------------------------------
+  - name: copy shipping service
+    ansible.builtin.copy:
+      src: shipping.service
+      dest: /etc/systemd/system/shipping.service
+
+
+  # -------------------------------------------------------
+  # Reload systemd configuration
+  # -------------------------------------------------------
+  # daemon_reload: true
+  # reloads systemd after adding/changing service file.
+  # -------------------------------------------------------
+  - name: daemon reload
+    ansible.builtin.systemd_service:
+      daemon_reload: true
+
+
+  # -------------------------------------------------------
+  # Enable and start shipping service
+  # -------------------------------------------------------
+  # enabled: yes
+  # service starts automatically after reboot.
+  #
+  # state: started
+  # ensures service running now.
+  # -------------------------------------------------------
+  - name: enable and start shipping
+    ansible.builtin.service:
+      name: shipping
+      state: started
+      enabled: yes
+
+
+  # -------------------------------------------------------
+  # Import MySQL schema and data
+  # -------------------------------------------------------
+  # community.mysql.mysql_db module manages MySQL DBs.
+  #
+  # state: import
+  # imports SQL file into database.
+  #
+  # login_user/login_password
+  # MySQL authentication credentials.
+  #
+  # target:
+  # SQL file path.
+  #
+  # loop imports multiple SQL files:
+  #
+  # schema.sql
+  #   -> database structure/tables
+  #
+  # app-user.sql
+  #   -> application DB user permissions
+  #
+  # master-data.sql
+  #   -> initial data records
+  #
+  # tags: import
+  #
+  # Allows selective execution:
+  # ansible-playbook playbook.yml --tags import
+  # -------------------------------------------------------
+  - name: import data
+    tags:
+    - import
+    community.mysql.mysql_db:
+      name: all
+      login_user: root
+      login_password: RoboShop@1
+      login_host: mysql.venkatapp.fun
+      state: import
+      target: "{{ item }}"
+    loop:
+    - /app/db/schema.sql
+    - /app/db/app-user.sql
+    - /app/db/master-data.sql
+
+
+  # -------------------------------------------------------
+  # Restart shipping service
+  # -------------------------------------------------------
+  # Restart required after:
+  #   database schema import
+  #   configuration changes
+  #
+  # state: restarted
+  # stops and starts service again.
+  #
+  # tags: import
+  # executes only when import tag used.
+  # -------------------------------------------------------
+  - name: restart shipping
+    tags:
+    - import
+    ansible.builtin.service:
+      state: restarted
+      name: shipping

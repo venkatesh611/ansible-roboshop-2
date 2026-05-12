@@ -1,0 +1,238 @@
+# =========================================================
+# PLAYBOOK: CART MICROSERVICE SETUP
+# =========================================================
+# This playbook configures Cart microservice
+# in RoboShop application.
+#
+# Cart Service Responsibilities:
+#   - Maintains user shopping cart
+#   - Connects with Redis
+#   - Communicates with Catalogue service
+#
+# Technology Used:
+#   - NodeJS
+#
+# This playbook performs:
+#   1. NodeJS installation
+#   2. Application user creation
+#   3. Downloading application code
+#   4. Installing npm dependencies
+#   5. Configuring systemd service
+#   6. Starting application service
+# =========================================================
+
+- name: cart server setup
+
+  # "cart" refers to inventory group/server
+  hosts: cart
+
+
+  # Run all tasks with root/sudo privileges
+  become: yes
+
+
+  tasks:
+
+   # ------------------------------------------------------
+   # Disable default NodeJS module
+   # ------------------------------------------------------
+   # RHEL provides default AppStream module.
+   #
+   # Disabling prevents version conflicts.
+   #
+   # command module executes raw Linux command.
+   # ------------------------------------------------------
+   - name: disable dafault nodejs
+     ansible.builtin.command: dnf module disable nodejs -y
+
+
+   # ------------------------------------------------------
+   # Enable NodeJS version 20
+   # ------------------------------------------------------
+   # Cart service requires NodeJS v20 runtime.
+   #
+   # nodejs:20 -> specific stream/version
+   # ------------------------------------------------------
+   - name: enable nodejs 20 version
+     ansible.builtin.command: dnf module enable nodejs:20 -y
+
+
+   # ------------------------------------------------------
+   # Install NodeJS package
+   # ------------------------------------------------------
+   # dnf module installs packages in RHEL systems.
+   #
+   # state: present
+   # ensures package is installed.
+   #
+   # NodeJS required to execute:
+   # /app/server.js
+   # ------------------------------------------------------
+   - name: install node js
+     ansible.builtin.dnf:
+      name: nodejs
+      state: present
+
+
+   # ------------------------------------------------------
+   # Create roboshop application user
+   # ------------------------------------------------------
+   # Applications should not run as root.
+   #
+   # system: true
+   # creates system account.
+   #
+   # shell: /sbin/nologin
+   # prevents interactive login.
+   #
+   # home: /app
+   # application directory/home.
+   # ------------------------------------------------------
+   - name: create a system user
+     ansible.builtin.user:
+      name: roboshop
+      comment: user for running app
+      system: true
+      shell: /sbin/nologin
+      home: /app
+
+
+   # ------------------------------------------------------
+   # Remove existing application directory
+   # ------------------------------------------------------
+   # Ensures fresh deployment every run.
+   #
+   # state: absent
+   # removes directory if exists.
+   #
+   # No error if directory missing.
+   # ------------------------------------------------------
+   - name: removing app directory
+     ansible.builtin.file:
+      path: /app
+      state: absent
+
+
+   # ------------------------------------------------------
+   # Create fresh application directory
+   # ------------------------------------------------------
+   # state: directory
+   # creates directory if not present.
+   #
+   # Application code extracted here.
+   # ------------------------------------------------------
+   - name: creating app directory
+     ansible.builtin.file:
+      path: /app
+      state: directory
+
+
+   # ------------------------------------------------------
+   # Remove old zip artifact
+   # ------------------------------------------------------
+   # Prevents issues with:
+   #   stale files
+   #   corrupted downloads
+   #
+   # /tmp used for temporary storage.
+   # ------------------------------------------------------
+   - name: removing tmp/cart.zip file
+     ansible.builtin.file:
+      path: /tmp/cart.zip
+      state: absent
+
+
+   # ------------------------------------------------------
+   # Download application code
+   # ------------------------------------------------------
+   # get_url downloads files from internet.
+   #
+   # url  -> source location
+   # dest -> destination in target server
+   #
+   # Downloads application zip from AWS S3.
+   # ------------------------------------------------------
+   - name: downloading the code
+     ansible.builtin.get_url:
+      url: https://roboshop-artifacts.s3.amazonaws.com/cart-v3.zip
+      dest: /tmp/cart.zip
+
+
+   # ------------------------------------------------------
+   # Extract application code
+   # ------------------------------------------------------
+   # unarchive extracts zip/tar files.
+   #
+   # remote_src: yes
+   # means file already exists in remote server.
+   #
+   # Without remote_src,
+   # ansible copies from control node.
+   # ------------------------------------------------------
+   - name: unzip the file
+     ansible.builtin.unarchive:
+      src: /tmp/cart.zip
+      dest: /app
+      remote_src: yes
+
+
+   # ------------------------------------------------------
+   # Install NodeJS dependencies
+   # ------------------------------------------------------
+   # npm module executes:
+   # npm install
+   #
+   # inside /app directory.
+   #
+   # Reads package.json and installs:
+   #   express
+   #   redis client
+   #   other libraries
+   #
+   # Equivalent command:
+   # cd /app && npm install
+   # ------------------------------------------------------
+   - name: install npm modules
+     community.general.npm:
+      path: /app
+
+
+   # ------------------------------------------------------
+   # Copy systemd service file
+   # ------------------------------------------------------
+   # copy module transfers files:
+   # control node -> target node
+   #
+   # cart.service defines:
+   #   startup command
+   #   environment variables
+   #   runtime configuration
+   # ------------------------------------------------------
+   - name: copy service file
+     ansible.builtin.copy:
+      src: cart.service
+      dest: /etc/systemd/system/cart.service
+
+
+   # ------------------------------------------------------
+   # Reload systemd and restart service
+   # ------------------------------------------------------
+   # daemon_reload: true
+   # reloads systemd after new service file added.
+   #
+   # enabled: true
+   # service starts automatically after reboot.
+   #
+   # state: restarted
+   # restarts service immediately.
+   #
+   # restarted useful when:
+   #   config changed
+   #   new deployment happened
+   # ------------------------------------------------------
+   - name: restart cart service
+     ansible.builtin.systemd_service:
+      name: cart
+      enabled: true
+      state: restarted
+      daemon_reload: true

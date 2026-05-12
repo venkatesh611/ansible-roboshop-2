@@ -1,0 +1,145 @@
+# =========================================================
+# PLAYBOOK: RABBITMQ SERVER SETUP
+# =========================================================
+# This playbook configures RabbitMQ server
+# for RoboShop application.
+#
+# RabbitMQ Responsibilities:
+#   - Message broker
+#   - Queue management
+#   - Asynchronous communication
+#
+# Example:
+# Payment service communicates using RabbitMQ.
+#
+# Technology Stack:
+#   - RabbitMQ
+#   - Erlang Runtime
+#
+# This playbook performs:
+#   1. Configure RabbitMQ repositories
+#   2. Install RabbitMQ server
+#   3. Start RabbitMQ service
+#   4. Create RabbitMQ application user
+#   5. Assign permissions
+# =========================================================
+
+- name: setup rabbitmq server
+
+  # Target inventory group/server
+  hosts: rabbitmq
+
+
+  # Execute tasks using sudo/root privileges
+  become: yes
+
+
+  tasks:
+
+   # ------------------------------------------------------
+   # Copy RabbitMQ repository configuration
+   # ------------------------------------------------------
+   # copy module transfers file:
+   # control node -> managed node
+   #
+   # rabbitmq.repo contains:
+   #   - RabbitMQ repositories
+   #   - Erlang repositories
+   #
+   # Repository file destination:
+   # /etc/yum.repos.d/
+   #
+   # After copying,
+   # yum/dnf can install RabbitMQ packages.
+   # ------------------------------------------------------
+   - name: add repo to /etc/yum.repos.d/rabbitmq.repo
+     ansible.builtin.copy:
+      src: rabbitmq.repo
+      dest: /etc/yum.repos.d/rabbitmq.repo
+
+
+   # ------------------------------------------------------
+   # Install RabbitMQ server
+   # ------------------------------------------------------
+   # package module installs software packages.
+   #
+   # rabbitmq-server package installs:
+   #   - RabbitMQ daemon
+   #   - Erlang dependencies
+   #   - management components
+   #
+   # state: present
+   # ensures package installed.
+   # ------------------------------------------------------
+   - name: install rabbitmq
+     ansible.builtin.package:
+      name: rabbitmq-server
+      state: present
+
+
+   # ------------------------------------------------------
+   # Start and enable RabbitMQ service
+   # ------------------------------------------------------
+   # service module manages Linux services.
+   #
+   # state: started
+   # ensures service running now.
+   #
+   # enabled: yes
+   # automatically starts service after reboot.
+   #
+   # Service name:
+   # rabbitmq-server
+   # ------------------------------------------------------
+   - name: start and enable the server
+     ansible.builtin.service:
+      name: rabbitmq-server
+      state: started
+      enabled: yes
+
+
+   # ------------------------------------------------------
+   # Create RabbitMQ application user
+   # ------------------------------------------------------
+   # community.rabbitmq.rabbitmq_user module
+   # manages RabbitMQ users and permissions.
+   #
+   # This module is idempotent:
+   # safe to run multiple times.
+   #
+   # User created:
+   # roboshop
+   #
+   # Password:
+   # roboshop123
+   #
+   # permissions section defines:
+   #
+   # vhost: /
+   # default RabbitMQ virtual host.
+   #
+   # configure_priv: .*
+   # permission to configure exchanges/queues.
+   #
+   # read_priv: .*
+   # permission to consume/read messages.
+   #
+   # write_priv: .*
+   # permission to publish/write messages.
+   #
+   # .* is regex meaning:
+   # "allow everything"
+   #
+   # state: present
+   # ensures user exists.
+   # ------------------------------------------------------
+   - name: create and provide permissions to user
+     community.rabbitmq.rabbitmq_user:
+      user: roboshop
+      password: roboshop123
+      permissions:
+        - vhost: /
+          configure_priv: .*
+          read_priv: .*
+          write_priv: .*
+      state: present

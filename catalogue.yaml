@@ -1,0 +1,308 @@
+# =========================================================
+# PLAYBOOK: CATALOGUE MICROSERVICE SETUP
+# =========================================================
+# This playbook configures the Catalogue microservice
+# of RoboShop application.
+#
+# Catalogue Service Responsibilities:
+#   - Stores product/catalog information
+#   - Connects with MongoDB database
+#   - Runs as NodeJS application
+#
+# This playbook performs:
+#   1. NodeJS installation
+#   2. Application user creation
+#   3. Downloading application code
+#   4. Installing npm dependencies
+#   5. Configuring MongoDB client
+#   6. Loading initial database schema/data
+#   7. Configuring systemd service
+# =========================================================
+
+- name: Setup Catalogue Server
+
+  # "catalogue" refers to inventory group/server
+  hosts: catalogue
+
+  # Execute all tasks with sudo privileges
+  become: yes
+
+  tasks:
+
+   # ------------------------------------------------------
+   # Disable default NodeJS module
+   # ------------------------------------------------------
+   # RHEL systems provide default AppStream modules.
+   #
+   # Disabling avoids version conflicts before enabling
+   # required NodeJS version.
+   #
+   # command module executes raw Linux command.
+   # ------------------------------------------------------
+   - name: Disable default Node.js module
+     ansible.builtin.command: dnf module disable nodejs -y
+
+
+   # ------------------------------------------------------
+   # Enable NodeJS version 20
+   # ------------------------------------------------------
+   # Catalogue application requires NodeJS 20 runtime.
+   #
+   # nodejs:20 -> enable version 20 stream
+   # ------------------------------------------------------
+   - name: Enable required Node.js version
+     ansible.builtin.command: dnf module enable nodejs:20 -y
+
+
+   # ------------------------------------------------------
+   # Install NodeJS package
+   # ------------------------------------------------------
+   # package module is generic package manager.
+   #
+   # state: present
+   # ensures package exists in server.
+   #
+   # NodeJS runtime required to execute:
+   # /app/server.js
+   # ------------------------------------------------------
+   - name: Install Node.js
+     ansible.builtin.package:
+      name: nodejs
+      state: present
+
+
+   # ------------------------------------------------------
+   # Create application system user
+   # ------------------------------------------------------
+   # Applications should not run with root user.
+   #
+   # system: true
+   # creates system account.
+   #
+   # shell: /sbin/nologin
+   # disables interactive login.
+   #
+   # home: /app
+   # application home directory.
+   # ------------------------------------------------------
+   - name: Create roboshop system user
+     ansible.builtin.user:
+      name: roboshop
+      comment: RoboShop System user
+      system: true
+      shell: /sbin/nologin
+      home: /app
+
+
+   # ------------------------------------------------------
+   # Remove old application directory
+   # ------------------------------------------------------
+   # Ensures clean deployment every run.
+   #
+   # state: absent
+   # removes directory if exists.
+   #
+   # No error if directory missing.
+   # ------------------------------------------------------
+   - name: Remove existing app directory
+     ansible.builtin.file:
+      path: /app
+      state: absent
+
+
+   # ------------------------------------------------------
+   # Create fresh application directory
+   # ------------------------------------------------------
+   # state: directory
+   # creates directory if missing.
+   #
+   # Application code extracted here.
+   # ------------------------------------------------------
+   - name: Create app directory
+     ansible.builtin.file:
+      path: /app
+      state: directory
+
+
+   # ------------------------------------------------------
+   # Remove old application artifact
+   # ------------------------------------------------------
+   # Prevents issues from stale/corrupted zip files.
+   #
+   # /tmp used for temporary downloads.
+   # ------------------------------------------------------
+   - name: Remove old catalogue zip file
+     ansible.builtin.file:
+      path: /tmp/catalogue.zip
+      state: absent
+
+
+   # ------------------------------------------------------
+   # Download latest application code
+   # ------------------------------------------------------
+   # get_url downloads files from internet.
+   #
+   # url  -> source file location
+   # dest -> destination path in remote server
+   # ------------------------------------------------------
+   - name: Download catalogue code from S3
+     ansible.builtin.get_url:
+      url: https://roboshop-artifacts.s3.amazonaws.com/catalogue-v3.zip
+      dest: /tmp/catalogue.zip
+
+
+   # ------------------------------------------------------
+   # Extract application code
+   # ------------------------------------------------------
+   # unarchive extracts zip/tar files.
+   #
+   # remote_src: yes
+   # means zip file already exists
+   # in target server.
+   #
+   # Without remote_src,
+   # ansible copies from control node.
+   # ------------------------------------------------------
+   - name: Extract application code
+     ansible.builtin.unarchive:
+      src: /tmp/catalogue.zip
+      dest: /app
+      remote_src: yes
+
+
+   # ------------------------------------------------------
+   # Install NodeJS dependencies
+   # ------------------------------------------------------
+   # npm module executes npm install
+   # inside /app directory.
+   #
+   # Reads package.json and installs:
+   #   - express
+   #   - mongodb drivers
+   #   - other dependencies
+   #
+   # Equivalent command:
+   # cd /app && npm install
+   # ------------------------------------------------------
+   - name: Install Node.js dependencies
+     community.general.npm:
+      path: /app
+
+
+   # ------------------------------------------------------
+   # Copy systemd service file
+   # ------------------------------------------------------
+   # copy module copies files from:
+   # control machine -> managed node
+   #
+   # This service file defines:
+   #   - startup command
+   #   - environment variables
+   #   - runtime user
+   # ------------------------------------------------------
+   - name: Copy catalogue service file
+     ansible.builtin.copy:
+      src: catalogue.service
+      dest: /etc/systemd/system/catalogue.service
+
+
+   # ------------------------------------------------------
+   # Copy MongoDB repository configuration
+   # ------------------------------------------------------
+   # mongo.repo contains yum repository details.
+   #
+   # Required before installing:
+   # mongodb-mongosh
+   #
+   # Repository files stored under:
+   # /etc/yum.repos.d/
+   # ------------------------------------------------------
+   - name: Copy MongoDB repo file
+     ansible.builtin.copy:
+      src: mongo.repo
+      dest: /etc/yum.repos.d/mongo.repo
+
+
+   # ------------------------------------------------------
+   # Install MongoDB shell client
+   # ------------------------------------------------------
+   # mongosh is MongoDB command-line shell.
+   #
+   # Used for:
+   #   - checking databases
+   #   - loading schema/data
+   #   - executing MongoDB commands
+   # ------------------------------------------------------
+   - name: Install MongoDB client
+     ansible.builtin.package:
+      name: mongodb-mongosh
+      state: present
+
+
+   # ------------------------------------------------------
+   # Check whether catalogue DB exists
+   # ------------------------------------------------------
+   # mongosh command connects to MongoDB server.
+   #
+   # --quiet
+   # removes unnecessary shell output.
+   #
+   # --eval
+   # executes JavaScript expression directly.
+   #
+   # indexOf('catalogue')
+   #
+   # returns:
+   #   >=0  -> DB exists
+   #   -1   -> DB not exists
+   #
+   # register:
+   # stores command output into variable.
+   # ------------------------------------------------------
+   - name: Check catalogue DB existence
+     ansible.builtin.command: mongosh mongodb.venkatapp.fun --quiet --eval "db.getMongo().getDBNames().indexOf('catalogue')"
+     register: catalogue_output
+
+
+   # ------------------------------------------------------
+   # Load initial database data
+   # ------------------------------------------------------
+   # shell module executes shell commands.
+   #
+   # master-data.js contains:
+   #   - initial product data
+   #   - categories
+   #   - sample catalog entries
+   #
+   # when condition:
+   # executes ONLY if DB not exists.
+   #
+   # catalogue_output.stdout
+   # contains command output.
+   #
+   # | int
+   # converts string to integer.
+   # ------------------------------------------------------
+   - name: Load products into MongoDB
+     ansible.builtin.shell: mongosh --host mongodb.venkatapp.fun </app/db/master-data.js
+     when: catalogue_output.stdout | int < 0
+
+
+   # ------------------------------------------------------
+   # Reload systemd and start service
+   # ------------------------------------------------------
+   # daemon_reload: true
+   # reloads systemd after adding new service file.
+   #
+   # enabled: true
+   # service auto-starts after reboot.
+   #
+   # state: started
+   # ensures service running now.
+   # ------------------------------------------------------
+   - name: Enable and start catalogue service
+     ansible.builtin.systemd_service:
+      name: catalogue
+      enabled: true
+      state: started
+      daemon_reload: true

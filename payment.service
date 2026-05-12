@@ -1,0 +1,147 @@
+# =========================================================
+# PAYMENT MICROSERVICE - SYSTEMD SERVICE FILE
+# =========================================================
+# This file tells Linux systemd how to manage
+# the Payment microservice.
+#
+# Location:
+# /etc/systemd/system/payment.service
+#
+# Payment Service Responsibilities:
+#   - Handles payment processing
+#   - Communicates with Cart service
+#   - Communicates with User service
+#   - Uses RabbitMQ message broker
+#
+# Technology Used:
+#   - Python
+#   - uWSGI
+#
+# =========================================================
+
+[Unit]
+
+# Human-readable description
+Description=Payment Service
+
+
+[Service]
+
+# Application runs with root user
+#
+# Usually applications should run using non-root user.
+#
+# But sometimes root used because:
+#   - permission requirements
+#   - legacy configuration
+#   - port binding needs
+#
+# In production,
+# better practice is dedicated application user.
+User=root
+
+
+# ---------------------------------------------------------
+# Working Directory
+# ---------------------------------------------------------
+# Sets current directory before application starts.
+#
+# Equivalent Linux command:
+# cd /app
+# ---------------------------------------------------------
+WorkingDirectory=/app
+
+
+# ---------------------------------------------------------
+# Environment Variables
+# ---------------------------------------------------------
+# Environment variables provide runtime configuration.
+#
+# Python application accesses using:
+# os.environ
+#
+# These values help Payment service
+# communicate with other microservices.
+# ---------------------------------------------------------
+
+
+# Cart service hostname
+#
+# Payment service contacts cart service
+# to retrieve cart details before payment.
+Environment=CART_HOST=cart.venkatapp.fun
+
+
+# Cart service application port
+Environment=CART_PORT=8080
+
+
+# User service hostname
+#
+# Used for:
+#   user validation
+#   user information retrieval
+Environment=USER_HOST=user.venkatapp.fun
+
+
+# User service port
+Environment=USER_PORT=8080
+
+
+# RabbitMQ hostname
+#
+# RabbitMQ used as message broker.
+#
+# Used for:
+#   asynchronous communication
+#   event/message processing
+#   queue management
+Environment=AMQP_HOST=rabbitmq.venkatapp.fun
+
+
+# RabbitMQ username
+Environment=AMQP_USER=roboshop
+
+
+# RabbitMQ password
+Environment=AMQP_PASS=roboshop123
+
+
+# ---------------------------------------------------------
+# Application Startup Command
+# ---------------------------------------------------------
+# uWSGI is application server for Python apps.
+#
+# payment.ini contains:
+#   - socket configuration
+#   - worker configuration
+#   - runtime settings
+#
+# Equivalent command:
+# uwsgi --ini payment.ini
+# ---------------------------------------------------------
+ExecStart=/usr/local/bin/uwsgi --ini payment.ini
+
+
+# ---------------------------------------------------------
+# Stop Command
+# ---------------------------------------------------------
+# $MAINPID refers to main process ID.
+#
+# kill -9 forcefully terminates process.
+#
+# SIGKILL used for immediate shutdown.
+# ---------------------------------------------------------
+ExecStop=/bin/kill -9 $MAINPID
+
+
+# Log identifier visible in:
+# journalctl
+# systemctl status
+SyslogIdentifier=payment
+
+
+[Install]
+
+# Start service during normal server boot
+WantedBy=multi-user.target

@@ -1,0 +1,91 @@
+# =========================================================
+# CART MICROSERVICE - SYSTEMD SERVICE FILE
+# =========================================================
+# This service file defines how Linux systemd
+# should manage the Cart microservice.
+#
+# Location:
+# /etc/systemd/system/cart.service
+#
+# Cart Service Responsibilities:
+#   - Stores user cart items
+#   - Communicates with Redis
+#   - Communicates with Catalogue service
+#
+# =========================================================
+
+[Unit]
+
+# Human-readable service description
+Description=Cart Service
+
+
+[Service]
+
+# Application runs using roboshop user
+#
+# Security best practice:
+# Never run application using root user
+User=roboshop
+
+
+# ---------------------------------------------------------
+# Environment Variables
+# ---------------------------------------------------------
+# Environment variables are runtime configurations
+# passed externally to application.
+#
+# In NodeJS:
+# process.env.VARIABLE_NAME
+#
+# Application reads these values during runtime.
+# ---------------------------------------------------------
+
+
+# Redis hostname
+#
+# Cart service uses Redis for:
+#   - session storage
+#   - cart caching
+#   - fast temporary storage
+#
+# redis.venkatapp.fun
+# resolves using Route53 DNS
+Environment=REDIS_HOST=redis.venkatapp.fun
+
+
+# Catalogue service hostname
+#
+# Cart service communicates with catalogue service
+# to fetch product information.
+Environment=CATALOGUE_HOST=catalogue.venkatapp.fun
+
+
+# Catalogue service port
+#
+# Catalogue microservice runs on port 8080
+Environment=CATALOGUE_PORT=8080
+
+
+# ---------------------------------------------------------
+# Application Startup Command
+# ---------------------------------------------------------
+# /bin/node       -> NodeJS runtime
+# /app/server.js  -> Main application file
+#
+# Equivalent command:
+# node /app/server.js
+# ---------------------------------------------------------
+ExecStart=/bin/node /app/server.js
+
+
+# Identifier visible in:
+# journalctl
+# systemctl status
+SyslogIdentifier=cart
+
+
+[Install]
+
+# Start service automatically during system boot
+WantedBy=multi-user.target

@@ -1,0 +1,120 @@
+# =========================================================
+# PLAYBOOK: MONGODB SERVER SETUP
+# =========================================================
+# This playbook configures MongoDB database server
+# for RoboShop application.
+#
+# MongoDB Responsibilities:
+#   - Stores catalogue data
+#   - Stores user data
+#   - Acts as NoSQL database
+#
+# This playbook performs:
+#   1. Configure MongoDB repository
+#   2. Install MongoDB packages
+#   3. Allow remote connections
+#   4. Start MongoDB service
+# =========================================================
+
+- name: mongodb setup
+
+  # Target inventory group/server
+  hosts: mongodb
+
+
+  # Execute tasks with sudo/root privileges
+  become: yes
+
+
+  tasks:
+
+  # -------------------------------------------------------
+  # Copy MongoDB repository file
+  # -------------------------------------------------------
+  # copy module transfers file:
+  # control node -> managed node
+  #
+  # mongo.repo contains repository configuration.
+  #
+  # Repository files stored in:
+  # /etc/yum.repos.d/
+  #
+  # After copying,
+  # yum/dnf can install MongoDB packages.
+  # -------------------------------------------------------
+  - name: copy the repo and paste it in /etc/yum.repos.d/mongo.repo
+    ansible.builtin.copy:
+     src: mongo.repo
+     dest: /etc/yum.repos.d/mongo.repo
+
+
+  # -------------------------------------------------------
+  # Install MongoDB server
+  # -------------------------------------------------------
+  # package module installs software packages.
+  #
+  # mongodb-org is official MongoDB meta-package.
+  #
+  # Installs:
+  #   - mongod server
+  #   - mongo shell
+  #   - tools/utilities
+  #
+  # state: present
+  # ensures package installed.
+  # -------------------------------------------------------
+  - name: install mongodb
+    ansible.builtin.package:
+     name: mongodb-org
+     state: present
+
+
+  # -------------------------------------------------------
+  # Allow remote connections
+  # -------------------------------------------------------
+  # By default MongoDB listens only on:
+  # 127.0.0.1 (localhost)
+  #
+  # That means:
+  # only local machine can connect.
+  #
+  # RoboShop microservices run on separate servers,
+  # so remote access must be enabled.
+  #
+  # replace module searches and replaces text.
+  #
+  # regexp:
+  # text/pattern to search.
+  #
+  # replace:
+  # replacement value.
+  #
+  # 0.0.0.0 means:
+  # listen on all network interfaces.
+  # -------------------------------------------------------
+  - name: allow remote connection
+    ansible.builtin.replace:
+     path: /etc/mongod.conf
+     regexp: "127.0.0.1"
+     replace: "0.0.0.0"
+
+
+  # -------------------------------------------------------
+  # Start and enable MongoDB service
+  # -------------------------------------------------------
+  # service module manages Linux services.
+  #
+  # state: started
+  # ensures service running now.
+  #
+  # enabled: yes
+  # automatically starts service after reboot.
+  #
+  # Service name:
+  # mongod
+  # -------------------------------------------------------
+  - name: start and enable the service
+    ansible.builtin.service:
+     name: mongod
+     state: started
+     enabled: yes

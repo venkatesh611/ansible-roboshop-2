@@ -1,0 +1,239 @@
+# =========================================================
+# PLAYBOOK: PAYMENT MICROSERVICE SETUP
+# =========================================================
+# This playbook configures Payment microservice
+# in RoboShop application.
+#
+# Payment Service Responsibilities:
+#   - Handles payment transactions
+#   - Connects with Cart service
+#   - Connects with User service
+#   - Uses RabbitMQ for messaging
+#
+# Technology Stack:
+#   - Python
+#   - uWSGI
+#
+# This playbook performs:
+#   1. Python installation
+#   2. Application user creation
+#   3. Downloading application code
+#   4. Installing Python dependencies
+#   5. Configuring systemd service
+#   6. Starting payment service
+# =========================================================
+
+- name: setup payment Service
+
+  # Target inventory group/server
+  hosts: payment
+
+
+  # Execute tasks with root/sudo privileges
+  become: yes
+
+
+  tasks:
+
+   # ------------------------------------------------------
+   # Install Python and build dependencies
+   # ------------------------------------------------------
+   # dnf module installs packages in RHEL systems.
+   #
+   # loop used to install multiple packages.
+   #
+   # Packages:
+   #
+   # python3
+   #   -> Python runtime
+   #
+   # gcc
+   #   -> GNU compiler
+   #   -> required for building native Python packages
+   #
+   # python3-devel
+   #   -> Python header files
+   #   -> needed while compiling Python libraries
+   # ------------------------------------------------------
+   - name: install python language
+     ansible.builtin.dnf:
+      name: "{{ item }}"
+      state: present
+     loop:
+      - python3
+      - gcc
+      - python3-devel
+
+
+   # ------------------------------------------------------
+   # Create roboshop system user
+   # ------------------------------------------------------
+   # Applications should not run as regular login users.
+   #
+   # system: true
+   # creates system account.
+   #
+   # shell: /sbin/nologin
+   # disables shell login.
+   #
+   # home: /app
+   # application home directory.
+   # ------------------------------------------------------
+   - name: create  asystem user
+     ansible.builtin.user:
+      name: roboshop
+      comment: create user for app
+      system: true
+      shell: /sbin/nologin
+      home: /app
+
+
+   # ------------------------------------------------------
+   # Remove old application directory
+   # ------------------------------------------------------
+   # Ensures fresh deployment.
+   #
+   # state: absent
+   # deletes directory if exists.
+   # ------------------------------------------------------
+   - name: removing app directory
+     ansible.builtin.file:
+      path: /app
+      state: absent
+
+
+   # ------------------------------------------------------
+   # Create fresh application directory
+   # ------------------------------------------------------
+   # state: directory
+   # creates directory if missing.
+   #
+   # Application code extracted here.
+   # ------------------------------------------------------
+   - name: creating the app directory
+     ansible.builtin.file:
+      path: /app
+      state: directory
+
+
+   # ------------------------------------------------------
+   # Remove old zip artifact
+   # ------------------------------------------------------
+   # Prevents stale/corrupted deployments.
+   #
+   # /tmp used for temporary downloads.
+   # ------------------------------------------------------
+   - name: removie zip file
+     ansible.builtin.file:
+      path: /tmp/payment.zip
+      state: absent
+
+
+   # ------------------------------------------------------
+   # Download application code
+   # ------------------------------------------------------
+   # get_url downloads files from internet.
+   #
+   # url  -> source location
+   # dest -> target server destination
+   #
+   # Downloads payment service artifact from S3.
+   # ------------------------------------------------------
+   - name: download the code
+     ansible.builtin.get_url:
+      url: https://roboshop-artifacts.s3.amazonaws.com/payment-v3.zip
+      dest: /tmp/payment.zip
+
+
+   # ------------------------------------------------------
+   # Extract application code
+   # ------------------------------------------------------
+   # unarchive extracts zip/tar files.
+   #
+   # remote_src: yes
+   # means file already exists in target server.
+   #
+   # Code extracted into /app directory.
+   # ------------------------------------------------------
+   - name: unzip the file
+     ansible.builtin.unarchive:
+      src: /tmp/payment.zip
+      dest: /app
+      remote_src: yes
+
+
+   # ------------------------------------------------------
+   # Install Python dependencies
+   # ------------------------------------------------------
+   # pip module installs Python packages.
+   #
+   # requirements.txt contains:
+   #   flask
+   #   uwsgi
+   #   requests
+   #   pika
+   #   and other dependencies
+   #
+   # executable: pip3.9
+   # explicitly uses Python 3.9 pip.
+   #
+   # args:
+   # chdir: /app
+   #
+   # Equivalent command:
+   # cd /app && pip3.9 install -r requirements.txt
+   # ------------------------------------------------------
+   - name: install dependencies
+     ansible.builtin.pip:
+      requirements: requirements.txt
+      executable: pip3.9
+     args:
+      chdir: /app
+
+
+   # ------------------------------------------------------
+   # Copy systemd service file
+   # ------------------------------------------------------
+   # copy module transfers:
+   # control node -> managed node
+   #
+   # payment.service defines:
+   #   startup command
+   #   environment variables
+   #   runtime behavior
+   # ------------------------------------------------------
+   - name: copy payment service
+     ansible.builtin.copy:
+      src: payment.service
+      dest: /etc/systemd/system/payment.service
+
+
+   # ------------------------------------------------------
+   # Reload systemd configuration
+   # ------------------------------------------------------
+   # daemon_reload: true
+   # reloads systemd after adding/changing service file.
+   #
+   # Required after modifying service definitions.
+   # ------------------------------------------------------
+   - name: daemon reload
+     ansible.builtin.systemd_service:
+      daemon_reload: true
+
+
+   # ------------------------------------------------------
+   # Enable and start payment service
+   # ------------------------------------------------------
+   # service module manages Linux services.
+   #
+   # enabled: yes
+   # starts automatically after reboot.
+   #
+   # state: started
+   # ensures service is running now.
+   # ------------------------------------------------------
+   - name: enable and start payment
+     ansible.builtin.service:
+      name: payment
+      state: started
+      enabled: yes

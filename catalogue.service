@@ -1,0 +1,82 @@
+# =========================================================
+# CATALOGUE MICROSERVICE - SYSTEMD SERVICE FILE
+# =========================================================
+# This file tells Linux systemd how to manage
+# the catalogue microservice.
+#
+# Location:
+# /etc/systemd/system/catalogue.service
+#
+# Responsibilities:
+#   - Start application
+#   - Stop application
+#   - Restart service
+#   - Auto-start after reboot
+#   - Pass environment variables
+# =========================================================
+
+[Unit]
+
+# Human-readable description of service
+Description = Catalogue Service
+
+
+[Service]
+
+# Run application using roboshop user
+# Security best practice:
+# Never run applications with root user
+User=roboshop
+
+
+# ---------------------------------------------------------
+# Environment Variables
+# ---------------------------------------------------------
+# Environment variables are external configurations
+# passed to application runtime.
+#
+# In NodeJS:
+# process.env.VARIABLE_NAME
+# is used to access these values.
+# ---------------------------------------------------------
+
+# Enables MongoDB integration
+Environment=MONGO=true
+
+
+# MongoDB connection string
+#
+# Format:
+# mongodb://hostname:port/database
+#
+# hostname  -> mongodb.venkatapp.fun
+# port      -> 27017 (default MongoDB port)
+# database  -> catalogue
+#
+# Catalogue service stores product information here.
+Environment=MONGO_URL="mongodb://mongodb.venkatapp.fun:27017/catalogue"
+
+
+# ---------------------------------------------------------
+# Application Startup Command
+# ---------------------------------------------------------
+# /bin/node       -> NodeJS runtime binary
+# /app/server.js  -> Main application file
+#
+# Equivalent command:
+# node /app/server.js
+# ---------------------------------------------------------
+ExecStart=/bin/node /app/server.js
+
+
+# Log identifier visible in:
+# journalctl
+# systemctl status
+SyslogIdentifier=catalogue
+
+
+[Install]
+
+# multi-user.target means:
+# Start service during normal server boot
+WantedBy=multi-user.target

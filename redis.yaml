@@ -1,0 +1,163 @@
+# =========================================================
+# PLAYBOOK: REDIS SERVER SETUP
+# =========================================================
+# This playbook configures Redis server
+# for RoboShop application.
+#
+# Redis Responsibilities:
+#   - In-memory caching
+#   - Session storage
+#   - Fast key-value data storage
+#
+# Redis is used by:
+#   - Cart service
+#   - User service
+#   - Other microservices needing fast access
+#
+# Technology Stack:
+#   - Redis 7
+#
+# This playbook performs:
+#   1. Configure Redis module version
+#   2. Install Redis
+#   3. Allow remote access
+#   4. Disable protected mode
+#   5. Start Redis service
+# =========================================================
+
+- name: setup redis server
+
+  # Target inventory group/server
+  hosts: redis
+
+
+  # Execute tasks with sudo/root privileges
+  become: yes
+
+
+  tasks:
+
+  # -------------------------------------------------------
+  # Disable default Redis module
+  # -------------------------------------------------------
+  # RHEL systems use module streams.
+  #
+  # Multiple Redis versions may exist.
+  #
+  # Disabling default stream avoids:
+  #   - version conflicts
+  #   - dependency issues
+  #
+  # command module directly executes Linux command.
+  # -------------------------------------------------------
+  - name: disable default redis
+    ansible.builtin.command: dnf module disable redis -y
+
+
+  # -------------------------------------------------------
+  # Enable Redis version 7
+  # -------------------------------------------------------
+  # Enables required Redis 7 module stream.
+  #
+  # Ensures consistent Redis version installation.
+  # -------------------------------------------------------
+  - name: enable redis 7
+    ansible.builtin.command: dnf module enable redis:7 -y
+
+
+  # -------------------------------------------------------
+  # Install Redis package
+  # -------------------------------------------------------
+  # package module installs software packages.
+  #
+  # Redis package installs:
+  #   - redis server
+  #   - redis-cli utility
+  #   - service files
+  #
+  # state: present
+  # ensures package installed.
+  # -------------------------------------------------------
+  - name: install redis
+    ansible.builtin.package:
+      name: redis
+      state: present
+
+
+  # -------------------------------------------------------
+  # Allow remote Redis connections
+  # -------------------------------------------------------
+  # By default Redis listens only on:
+  # 127.0.0.1 (localhost)
+  #
+  # That means:
+  # only local machine can connect.
+  #
+  # RoboShop microservices run on separate servers,
+  # so remote access must be enabled.
+  #
+  # replace module searches and replaces text.
+  #
+  # regexp:
+  # text/pattern to search.
+  #
+  # replace:
+  # replacement value.
+  #
+  # 0.0.0.0 means:
+  # listen on all network interfaces.
+  # -------------------------------------------------------
+  - name: allow remote connections
+    ansible.builtin.replace:
+      path: /etc/redis/redis.conf
+      regexp: '127.0.0.1'
+      replace: '0.0.0.0'
+
+
+  # -------------------------------------------------------
+  # Disable Redis protected mode
+  # -------------------------------------------------------
+  # Redis protected mode prevents
+  # external connections for security.
+  #
+  # Since RoboShop services connect remotely,
+  # protected mode must be disabled.
+  #
+  # lineinfile module:
+  # ensures specific line exists in file.
+  #
+  # regexp:
+  # searches matching line.
+  #
+  # line:
+  # replaces with provided value.
+  #
+  # protected-mode no
+  # allows external access.
+  # -------------------------------------------------------
+  - name: disable proctected mode
+    ansible.builtin.lineinfile:
+      path: /etc/redis/redis.conf
+      regexp: 'protected-mode'
+      line: 'protected-mode no'
+
+
+  # -------------------------------------------------------
+  # Start and enable Redis service
+  # -------------------------------------------------------
+  # service module manages Linux services.
+  #
+  # state: started
+  # ensures service running now.
+  #
+  # enabled: yes
+  # automatically starts service after reboot.
+  #
+  # Service name:
+  # redis
+  # -------------------------------------------------------
+  - name: start and enable redis
+    ansible.builtin.service:
+      name: redis
+      enabled: yes
+      state: started

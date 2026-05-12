@@ -1,0 +1,85 @@
+# =========================================================
+# SYSTEMD SERVICE FILE FOR USER MICROSERVICE
+# =========================================================
+# Location:
+# /etc/systemd/system/user.service
+#
+# Purpose:
+# Defines how Linux should run and manage user service.
+#
+# systemd responsibilities:
+#   - start service
+#   - stop service
+#   - restart service
+#   - auto-start after reboot
+#   - monitor process
+# =========================================================
+
+[Unit]
+
+# Description visible in systemctl status output
+Description = User Service
+
+
+[Service]
+
+# Application runs using roboshop user
+# Security best practice:
+# avoid running applications as root
+User=roboshop
+
+
+# ---------------------------------------------------------
+# Environment Variables
+# ---------------------------------------------------------
+# Environment variables provide external configuration
+# to application without hardcoding in source code.
+#
+# Inside NodeJS application,
+# process.env.VARIABLE_NAME can access these values.
+# ---------------------------------------------------------
+
+# Enables MongoDB usage
+Environment=MONGO=true
+
+
+# Redis connection URL
+#
+# Format:
+# redis://hostname:port
+#
+# Redis used for:
+#   caching
+#   session storage
+#   fast temporary data
+Environment=REDIS_URL='redis://redis.daws86s.fun:6379'
+
+
+# MongoDB connection string
+#
+# Format:
+# mongodb://hostname:port/database
+#
+# users -> database name
+Environment=MONGO_URL="mongodb://mongodb.daws86s.fun:27017/users"
+
+
+# ---------------------------------------------------------
+# Application startup command
+# ---------------------------------------------------------
+# Executes NodeJS application.
+#
+# /bin/node -> NodeJS runtime
+# /app/server.js -> main application file
+# ---------------------------------------------------------
+ExecStart=/bin/node /app/server.js
+
+
+# Service logs identifier in journalctl/syslog
+SyslogIdentifier=user
+
+
+[Install]
+# multi-user.target means:
+# service starts during normal Linux boot mode
+WantedBy=multi-user.target

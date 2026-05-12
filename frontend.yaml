@@ -1,0 +1,202 @@
+# =========================================================
+# PLAYBOOK: FRONTEND SERVER SETUP
+# =========================================================
+# This playbook configures Frontend server
+# for RoboShop application.
+#
+# Frontend Responsibilities:
+#   - Serve static website files
+#   - Handle client/browser requests
+#   - Reverse proxy API calls to backend services
+#
+# Technology Stack:
+#   - NGINX
+#   - HTML/CSS/JavaScript
+#
+# This playbook performs:
+#   1. Install NGINX
+#   2. Deploy frontend static files
+#   3. Configure reverse proxy
+#   4. Restart web server
+# =========================================================
+
+- name: setup frontend server
+
+  # Target inventory group/server
+  hosts: frontend
+
+
+  # Execute tasks using sudo/root privileges
+  become: yes
+
+
+  tasks:
+
+  # -------------------------------------------------------
+  # Disable default nginx module
+  # -------------------------------------------------------
+  # RHEL-based systems use module streams.
+  #
+  # Multiple versions of nginx can exist.
+  #
+  # Disabling default stream avoids:
+  #   version conflicts
+  #   package dependency issues
+  #
+  # command module directly executes Linux command.
+  # -------------------------------------------------------
+  - name: disable default nginx
+    ansible.builtin.command: dnf module disable nginx -y
+
+
+  # -------------------------------------------------------
+  # Enable required nginx version
+  # -------------------------------------------------------
+  # Enables nginx version 1.24 module stream.
+  #
+  # Ensures consistent version installation.
+  # -------------------------------------------------------
+  - name: enable nginx 1.24
+    ansible.builtin.command: dnf module enable nginx:1.24 -y
+
+
+  # -------------------------------------------------------
+  # Install nginx package
+  # -------------------------------------------------------
+  # dnf module installs packages in RHEL systems.
+  #
+  # nginx acts as:
+  #   - web server
+  #   - reverse proxy
+  #   - static file server
+  #
+  # state: present
+  # ensures nginx installed.
+  # -------------------------------------------------------
+  - name: install nginx
+    ansible.builtin.dnf:
+      name: nginx
+      state: present
+
+
+  # -------------------------------------------------------
+  # Remove existing html directory
+  # -------------------------------------------------------
+  # Removes old frontend files.
+  #
+  # state: absent
+  # deletes directory if exists.
+  #
+  # Ensures clean deployment.
+  # -------------------------------------------------------
+  - name: remove html directory
+    ansible.builtin.file:
+      state: absent
+      path: /usr/share/nginx/html/
+
+
+  # -------------------------------------------------------
+  # Create fresh html directory
+  # -------------------------------------------------------
+  # Frontend application files stored here.
+  #
+  # NGINX default web root:
+  # /usr/share/nginx/html/
+  #
+  # state: directory
+  # creates directory if missing.
+  # -------------------------------------------------------
+  - name: create html directory
+    ansible.builtin.file:
+      path: /usr/share/nginx/html/
+      state: directory
+
+
+  # -------------------------------------------------------
+  # Download frontend application artifact
+  # -------------------------------------------------------
+  # get_url downloads files from internet.
+  #
+  # frontend-v3.zip contains:
+  #   HTML
+  #   CSS
+  #   JavaScript
+  #   images
+  #
+  # Downloads artifact from AWS S3.
+  # -------------------------------------------------------
+  - name: download frontend application
+    ansible.builtin.get_url:
+      url: https://roboshop-artifacts.s3.amazonaws.com/frontend-v3.zip
+      dest: /tmp/frontend.zip
+
+
+  # -------------------------------------------------------
+  # Extract frontend application
+  # -------------------------------------------------------
+  # unarchive extracts zip/tar files.
+  #
+  # remote_src: yes
+  # means file already exists on target server.
+  #
+  # Files extracted into nginx web root.
+  # -------------------------------------------------------
+  - name: extract frontend application
+    ansible.builtin.unarchive:
+      src: /tmp/frontend.zip
+      dest: /usr/share/nginx/html/
+      remote_src: yes
+
+
+  # -------------------------------------------------------
+  # Remove default nginx configuration
+  # -------------------------------------------------------
+  # Existing nginx.conf removed because:
+  # custom reverse proxy config needed.
+  #
+  # state: absent
+  # deletes file if exists.
+  # -------------------------------------------------------
+  - name: delete default nginx conf
+    ansible.builtin.file:
+      state: absent
+      path: /etc/nginx/nginx.conf
+
+
+  # -------------------------------------------------------
+  # Copy custom nginx configuration
+  # -------------------------------------------------------
+  # copy module transfers:
+  # control node -> managed node
+  #
+  # Custom nginx.conf contains:
+  #   - reverse proxy rules
+  #   - microservice routing
+  #   - frontend configuration
+  # -------------------------------------------------------
+  - name: copy nginx conf
+    ansible.builtin.copy:
+      src: nginx.conf
+      dest: /etc/nginx/nginx.conf
+
+
+  # -------------------------------------------------------
+  # Restart nginx service
+  # -------------------------------------------------------
+  # service module manages Linux services.
+  #
+  # state: restarted
+  # stops and starts service again.
+  #
+  # Useful after:
+  #   configuration changes
+  #   new frontend deployment
+  #
+  # enabled: yes
+  # automatically starts nginx after reboot.
+  # -------------------------------------------------------
+  - name: restart nginx
+    ansible.builtin.service:
+      name: nginx
+      state: restarted
+      enabled: yes

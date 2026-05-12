@@ -1,0 +1,92 @@
+# =========================================================
+# SHIPPING MICROSERVICE - SYSTEMD SERVICE FILE
+# =========================================================
+# This file defines how Linux systemd manages
+# the Shipping microservice.
+#
+# Location:
+# /etc/systemd/system/shipping.service
+#
+# Shipping Service Responsibilities:
+#   - Handles shipping calculations
+#   - Communicates with Cart service
+#   - Stores shipping data in MySQL
+#
+# Technology Used:
+#   - Java
+#   - Spring Boot
+#
+# =========================================================
+
+[Unit]
+
+# Human-readable service description
+Description=Shipping Service
+
+
+[Service]
+
+# Application runs using roboshop user
+#
+# Security best practice:
+# avoid running applications as root.
+User=roboshop
+
+
+# ---------------------------------------------------------
+# Environment Variables
+# ---------------------------------------------------------
+# Environment variables provide runtime configuration.
+#
+# In Java/Spring Boot:
+# values can be accessed through:
+#   System.getenv()
+#
+# Used for inter-service communication.
+# ---------------------------------------------------------
+
+
+# Cart service endpoint
+#
+# Shipping service contacts cart service
+# to retrieve cart/order details.
+#
+# Format:
+# hostname:port
+Environment=CART_ENDPOINT=cart.venkatapp.fun:8080
+
+
+# MySQL database hostname
+#
+# Shipping service stores:
+#   shipping details
+#   city data
+#   logistics information
+#
+# mysql.venkatapp.fun resolves via Route53.
+Environment=DB_HOST=mysql.venkatapp.fun
+
+
+# ---------------------------------------------------------
+# Application Startup Command
+# ---------------------------------------------------------
+# /bin/java           -> Java runtime
+# -jar                -> execute runnable jar file
+# /app/shipping.jar   -> Spring Boot application jar
+#
+# Equivalent command:
+# java -jar shipping.jar
+# ---------------------------------------------------------
+ExecStart=/bin/java -jar /app/shipping.jar
+
+
+# Log identifier visible in:
+# journalctl
+# systemctl status
+SyslogIdentifier=shipping
+
+
+[Install]
+
+# Start service automatically during system boot
+WantedBy=multi-user.target

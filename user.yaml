@@ -1,0 +1,262 @@
+# =========================================================
+# PLAYBOOK: USER MICROSERVICE SETUP
+# =========================================================
+# This playbook is used to configure the "user" microservice
+# in RoboShop application.
+#
+# User service is developed using NodeJS.
+# This playbook performs:
+#   1. NodeJS installation
+#   2. Application user creation
+#   3. Downloading application code
+#   4. Installing npm dependencies
+#   5. Configuring systemd service
+#   6. Starting application service
+#
+# Target Server : user
+# Application Path : /app
+# Service Name : user
+# =========================================================
+
+- name: setup user server
+
+  # "user" refers to inventory group/server
+  # Ansible will execute this playbook on user servers
+  hosts: user
+
+  # become: yes means execute tasks with sudo/root privilege
+  # Required for package installation, user creation, service management
+  become: yes
+
+  tasks:
+
+  # ---------------------------------------------------------
+  # Disable default NodeJS module
+  # ---------------------------------------------------------
+  # RHEL9/AppStream provides default nodejs versions.
+  # We disable existing module before enabling required version.
+  #
+  # command module executes Linux commands directly.
+  #
+  # -y automatically confirms yes
+  #
+  # Why needed?
+  # To avoid conflicts between old/default nodejs versions.
+  # ---------------------------------------------------------
+  - name: disable default nodejs
+    ansible.builtin.command: dnf module disable nodejs -y
+
+
+  # ---------------------------------------------------------
+  # Enable NodeJS 20 module
+  # ---------------------------------------------------------
+  # RoboShop user service requires NodeJS version 20.
+  #
+  # dnf module enable allows specific stream/version.
+  #
+  # nodejs:20 -> enabling version 20 stream
+  # ---------------------------------------------------------
+  - name: enable nodejs 20
+    ansible.builtin.command: dnf module enable nodejs:20 -y
+
+
+  # ---------------------------------------------------------
+  # Install NodeJS package
+  # ---------------------------------------------------------
+  # package module is generic package manager module.
+  # It automatically uses:
+  #   yum/dnf in RHEL
+  #   apt in Ubuntu
+  #
+  # state: present
+  # ensures package is installed.
+  #
+  # NodeJS is required to run server.js application.
+  # ---------------------------------------------------------
+  - name: install nodejs
+    ansible.builtin.package:
+      name: nodejs
+      state: present
+
+
+  # ---------------------------------------------------------
+  # Create roboshop system user
+  # ---------------------------------------------------------
+  # Best practice:
+  # Applications should not run with root user.
+  #
+  # user module manages Linux users.
+  #
+  # system: true
+  # creates system account (UID below 1000 usually)
+  #
+  # shell: /sbin/nologin
+  # prevents login access for security.
+  #
+  # home: /app
+  # sets application home directory.
+  # ---------------------------------------------------------
+  - name: create roboshop system user
+    ansible.builtin.user:
+      name: roboshop
+      comment: RoboShop System user
+      system: true
+      shell: /sbin/nologin
+      home: /app
+
+
+  # ---------------------------------------------------------
+  # Remove old application directory
+  # ---------------------------------------------------------
+  # file module is used to manage:
+  #   files
+  #   directories
+  #   permissions
+  #
+  # state: absent
+  # deletes file/directory if exists.
+  #
+  # Why remove?
+  # To ensure fresh deployment every time.
+  #
+  # Safe operation:
+  # If directory does not exist, no error.
+  # ---------------------------------------------------------
+  - name: remove app directory
+    ansible.builtin.file:
+      path: /app
+      state: absent
+
+
+  # ---------------------------------------------------------
+  # Create application directory
+  # ---------------------------------------------------------
+  # state: directory
+  # creates directory if not present.
+  #
+  # Application code will be extracted into /app
+  # ---------------------------------------------------------
+  - name: create app directory
+    ansible.builtin.file:
+      state: directory
+      path: /app
+
+
+  # ---------------------------------------------------------
+  # Delete old zip file
+  # ---------------------------------------------------------
+  # Removes previously downloaded artifact.
+  #
+  # Prevents issues with old/corrupted zip files.
+  # ---------------------------------------------------------
+  - name: Delete user file
+    ansible.builtin.file:
+      path: /tmp/user.zip
+      state: absent
+
+
+  # ---------------------------------------------------------
+  # Download application artifact
+  # ---------------------------------------------------------
+  # get_url module downloads files from internet.
+  #
+  # url:
+  # source location of application zip file
+  #
+  # dest:
+  # destination path in target server
+  #
+  # File gets downloaded into /tmp directory.
+  # ---------------------------------------------------------
+  - name: download user application
+    ansible.builtin.get_url:
+      url: https://roboshop-artifacts.s3.amazonaws.com/user-v3.zip
+      dest: /tmp/user.zip
+
+
+  # ---------------------------------------------------------
+  # Extract application code
+  # ---------------------------------------------------------
+  # unarchive module extracts zip/tar files.
+  #
+  # src:
+  # zip file location
+  #
+  # dest:
+  # extraction location
+  #
+  # remote_src: yes
+  # means source file already exists in remote server.
+  #
+  # Without remote_src,
+  # ansible tries copying from control machine.
+  # ---------------------------------------------------------
+  - name: extract user application
+    ansible.builtin.unarchive:
+      src: /tmp/user.zip
+      dest: /app
+      remote_src: yes
+
+
+  # ---------------------------------------------------------
+  # Install NodeJS dependencies
+  # ---------------------------------------------------------
+  # npm module installs dependencies mentioned
+  # inside package.json file.
+  #
+  # path: /app
+  # npm install runs inside /app directory.
+  #
+  # Equivalent Linux command:
+  # cd /app && npm install
+  #
+  # community.general.npm belongs to community collection.
+  # ---------------------------------------------------------
+  - name: install dependencies
+    community.general.npm:
+      path: /app
+
+
+  # ---------------------------------------------------------
+  # Copy systemd service file
+  # ---------------------------------------------------------
+  # copy module copies file from control machine
+  # to managed node.
+  #
+  # src:
+  # local file in ansible machine
+  #
+  # dest:
+  # destination path in target server
+  #
+  # Service file defines:
+  #   how application starts
+  #   environment variables
+  #   runtime configuration
+  # ---------------------------------------------------------
+  - name: copy user service
+    ansible.builtin.copy:
+      src: user.service
+      dest: /etc/systemd/system/user.service
+
+
+  # ---------------------------------------------------------
+  # Reload systemd and start service
+  # ---------------------------------------------------------
+  # systemd_service module manages Linux services.
+  #
+  # daemon_reload: true
+  # reloads systemd after adding new service file.
+  #
+  # enabled: true
+  # starts service automatically after reboot.
+  #
+  # state: started
+  # ensures service is running now.
+  # ---------------------------------------------------------
+  - name: daemon reload enable and start
+    ansible.builtin.systemd_service:
+      name: user
+      enabled: true
+      state: started
+      daemon_reload: true

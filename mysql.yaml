@@ -1,0 +1,107 @@
+# =========================================================
+# PLAYBOOK: MYSQL SERVER SETUP
+# =========================================================
+# This playbook configures MySQL database server
+# for RoboShop application.
+#
+# MySQL Responsibilities:
+#   - Stores relational data
+#   - Used by Shipping service
+#   - Stores tables, schemas, records
+#
+# This playbook performs:
+#   1. Install MySQL server
+#   2. Start MySQL service
+#   3. Enable service during boot
+#   4. Configure MySQL root password
+# =========================================================
+
+- name: setup mysql server
+
+  # Target inventory group/server
+  hosts: mysql
+
+
+  # Execute tasks using sudo/root privileges
+  become: yes
+
+
+  tasks:
+
+   # ------------------------------------------------------
+   # Install MySQL server package
+   # ------------------------------------------------------
+   # package module installs packages using:
+   #   yum/dnf in RHEL
+   #   apt in Ubuntu
+   #
+   # mysql-server package installs:
+   #   - mysqld service
+   #   - MySQL binaries
+   #   - database utilities
+   #
+   # state: present
+   # ensures package installed.
+   # ------------------------------------------------------
+   - name: install mysql server
+     ansible.builtin.package:
+      name: mysql-server
+      state: present
+
+
+   # ------------------------------------------------------
+   # Start and enable MySQL service
+   # ------------------------------------------------------
+   # service module manages Linux services.
+   #
+   # mysqld
+   # is MySQL daemon/service name.
+   #
+   # state: started
+   # ensures MySQL running now.
+   #
+   # enabled: yes
+   # automatically starts service after reboot.
+   # ------------------------------------------------------
+   - name: start and enable the server
+     ansible.builtin.service:
+      name: mysqld
+      state: started
+      enabled: yes
+
+
+   # ------------------------------------------------------
+   # Configure MySQL root password
+   # ------------------------------------------------------
+   # mysql_secure_installation is MySQL security utility.
+   #
+   # --set-root-pass
+   # sets root user password directly.
+   #
+   # Root user:
+   # highest privileged MySQL user.
+   #
+   # Equivalent command:
+   # mysql_secure_installation --set-root-pass RoboShop@1
+   #
+   # IMPORTANT:
+   # command module is NOT idempotent.
+   #
+   # If playbook runs second time:
+   # task may fail because password already set.
+   #
+   # Better real-time approach:
+   # use community.mysql.mysql_user module.
+   # ------------------------------------------------------
+  #  - name: setup root password
+  #    ansible.builtin.command: mysql_secure_installation --set-root-pass RoboShop@1
+
+
+   - name: set mysql root password
+     community.mysql.mysql_user:
+      name: root
+      host: localhost
+      password: RoboShop@1
+      login_unix_socket: /var/lib/mysql/mysql.sock
+      check_implicit_admin: true
+      state: present

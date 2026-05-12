@@ -52,7 +52,7 @@ Environment=MONGO=true
 #   caching
 #   session storage
 #   fast temporary data
-Environment=REDIS_URL='redis://redis.daws86s.fun:6379'
+Environment=REDIS_URL='redis://redis.venkatapp.fun:6379'
 
 
 # MongoDB connection string
